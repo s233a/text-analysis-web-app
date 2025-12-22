@@ -1,17 +1,34 @@
-# （仅展示需修改的“高频关键词”部分，其余代码不变）
-with col2:
-    st.subheader("🔤 高频关键词TOP10")
-    if top_keywords:
-        # 有有效关键词时，正常生成DataFrame
-        keyword_df = pd.DataFrame(
-            top_keywords,
-            columns=["关键词", "出现次数"]
-        )
+import streamlit as st
+import jieba
+from collections import Counter
+import pandas as pd
+
+# 页面配置
+st.set_page_config(page_title="简易文本分析工具", page_icon="📝")
+
+# 核心函数（省略，与之前一致）
+def calculate_text_stats(input_text):
+    # ...（函数内容不变）
+
+def get_top_keywords(pure_text, top_n=10):
+    # ...（函数内容不变）
+
+# 页面交互
+st.title("📝 简易文本分析Web应用")
+user_input = st.text_area("请输入文本", height=200)
+
+if st.button("开始分析"):
+    if user_input.strip():
+        text_stats = calculate_text_stats(user_input)
+        top_keywords = get_top_keywords(text_stats["纯文本内容"])
+        
+        # 先创建列变量，再使用with语句
+        col1, col2 = st.columns(2)  # 必须先执行这行！
+        with col1:
+            st.subheader("基础统计")
+            # ...（col1内容）
+        with col2:  # 此时col2已定义，不会报错
+            st.subheader("高频关键词")
+            # ...（col2内容）
     else:
-        # 无有效关键词时，生成空DataFrame（避免None）
-        keyword_df = pd.DataFrame(columns=["关键词", "出现次数"])
-    
-    # 展示DataFrame，同时补充提示信息
-    st.dataframe(keyword_df, index=False, use_container_width=True)
-    if not top_keywords:
-        st.info("📌 未提取到有效关键词（文本过短或无有效词汇）")
+        st.warning("请输入文本")
