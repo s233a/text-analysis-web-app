@@ -1,7 +1,6 @@
 streamlit
-jieba
-matplotlib
-wordcloud
-snownlp
-numpy
+requests
 beautifulsoup4
+jieba
+pandas
+plotly  # 新增：支持st.plotly_chart
