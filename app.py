@@ -3,7 +3,10 @@ import requests
 from bs4 import BeautifulSoup
 import jieba
 from collections import Counter
-import matplotlib.pyplot as plt  # 新增：导入matplotlib
+import matplotlib.pyplot as plt
+# 新增：解决matplotlib中文显示问题
+plt.rcParams["font.sans-serif"] = ["SimHei", "WenQuanYi Micro Hei"]  # 中文支持字体
+plt.rcParams["axes.unicode_minus"] = False  # 解决负号显示问题
 
 # 页面配置
 st.set_page_config(page_title="网页文本分析工具（多图可视化）", layout="centered")
@@ -56,7 +59,7 @@ else:
     manual_text = st.text_area(
         "请输入待分析文本",
         height=200,
-        placeholder="示例：今天天气很好，明天天气也不错，后天适合出门散步"
+        placeholder="示例：今天天气很好，明天天气也不错，后天适合出门散步，散步能放松心情"
     )
     if st.button("✅ 确认输入文本", use_container_width=True):
         if manual_text.strip():
@@ -90,18 +93,23 @@ if "target_text" in st.session_state:
                 st.caption("条形图（横向：长关键词更易读取）")
                 st.bar_chart({"关键词": words, "出现次数": counts}, x="出现次数", y="关键词", color="#ff7f0e")
 
-            # 第二排：折线图 + 饼图（改用matplotlib绘制）
+            # 第二排：折线图 + 饼图（修复中文显示）
             col3, col4 = st.columns(2)
             with col3:
                 st.caption("折线图（关键词词频趋势）")
                 st.line_chart({"关键词": words, "出现次数": counts}, x="关键词", y="出现次数", color="#2ca02c")
             with col4:
                 st.caption("饼状图（关键词词频占比）")
-                # 用matplotlib绘制饼图
+                # 绘制饼图（中文已正常显示）
                 fig, ax = plt.subplots()
-                ax.pie(counts, labels=words, autopct="%1.1f%%", colors=["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b"])
-                ax.axis("equal")  # 保证饼图是正圆形
-                st.pyplot(fig)  # 嵌入Streamlit
+                ax.pie(
+                    counts,
+                    labels=words,  # 中文关键词
+                    autopct="%1.1f%%",
+                    colors=["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b"]
+                )
+                ax.axis("equal")
+                st.pyplot(fig)
         else:
             st.info("📌 未提取到有效关键词")
 else:
