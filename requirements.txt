@@ -4,3 +4,4 @@ matplotlib
 wordcloud
 snownlp
 numpy
+beautifulsoup4
