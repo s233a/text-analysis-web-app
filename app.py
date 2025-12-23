@@ -1,11 +1,9 @@
 import streamlit as st
 import jieba
 from collections import Counter
-import matplotlib.pyplot as plt
-from wordcloud import WordCloud
 import numpy as np
 from snownlp import SnowNLP
-import platform
+import pandas as pd
 
 # 页面配置
 st.set_page_config(page_title="增强版文本分析工具", page_icon="📝", layout="centered")
@@ -21,36 +19,21 @@ STOP_WORDS = {
     "从", "往", "向", "比", "跟", "同", "和"
 }
 
-# ---------------------- 核心配置：中文字体（仅用于Matplotlib图表） ----------------------
-def set_chinese_font():
-    plt.rcParams['axes.unicode_minus'] = False
-    system = platform.system()
-    font_priority = [
-        'WenQuanYi Zen Hei', 'SimHei', 'PingFang SC', 
-        'Microsoft YaHei', 'Heiti SC', 'DejaVu Sans'
-    ]
-    for font_name in font_priority:
-        try:
-            plt.rcParams['font.sans-serif'] = [font_name]
-            return font_name
-        except:
-            continue
-    plt.rcParams['font.sans-serif'] = ['DejaVu Sans']
-    return 'DejaVu Sans'
-CH_FONT = set_chinese_font()
-
-# ---------------------- 核心函数 ----------------------
+# ---------------------- 核心函数（移除复杂Matplotlib依赖，改用原生组件） ----------------------
 def calculate_text_stats(input_text):
     total_with_space = len(input_text)
     pure_text = input_text.replace(" ", "").replace("\n", "")
     total_without_space = len(pure_text)
+    
     sentence_end_chars = "。！？；"
     sentence_count = 1
     for char in sentence_end_chars:
         sentence_count += pure_text.count(char)
+    
     punctuation_chars = '，。！？；：""''（）【】《》,.!?;:\'"()[]{}<>、'
     punctuation_count = sum(1 for char in pure_text if char in punctuation_chars)
     pure_word_count = total_without_space - punctuation_count
+    
     return {
         "含空格换行总字符数": total_with_space,
         "无空格换行纯字符数": total_without_space,
@@ -72,25 +55,6 @@ def get_top_keywords(pure_text, top_n=10):
         return []
     word_count = Counter(valid_words)
     return word_count.most_common(top_n)
-
-def generate_wordcloud(pure_text):
-    if not pure_text:
-        return None
-    word_list = jieba.lcut(pure_text)
-    valid_words = [word for word in word_list if word not in STOP_WORDS and len(word) > 1 and word.strip()]
-    if not valid_words:
-        return None
-    valid_words_str = " ".join(valid_words)
-    wc = WordCloud(
-        width=800, height=400, background_color="white",
-        font_path=None, max_words=100, max_font_size=100, random_state=42,
-        stopwords=STOP_WORDS
-    ).generate(valid_words_str)
-    fig, ax = plt.subplots(figsize=(10, 5))
-    ax.imshow(wc, interpolation="bilinear")
-    ax.axis("off")
-    plt.tight_layout()
-    return fig
 
 def analyze_sentiment(pure_text):
     if not pure_text:
@@ -119,59 +83,78 @@ def get_word_segmentation(pure_text):
         return "无有效分词（全为停用词/标点）"
     return " | ".join(filtered_word_list)
 
-def plot_text_composition_pie(text_stats):
-    set_chinese_font()
-    global CH_FONT
+# 替换Matplotlib饼图：用Streamlit原生表格+进度条展示文本构成
+def show_text_composition(text_stats):
     pure_word_count = text_stats["纯文字数（去标点）"]
     punctuation_count = text_stats["标点符号数"]
-    if pure_word_count + punctuation_count == 0:
-        fig, ax = plt.subplots(figsize=(8, 6))
-        ax.text(0.5, 0.5, "无有效文本数据可展示", ha='center', va='center', fontsize=14, fontfamily=CH_FONT)
-        ax.axis("off")
-        return fig
-    labels = ['纯文字', '标点符号']
-    sizes = [pure_word_count, punctuation_count]
-    colors = ['#A23B72', '#F18F01']
-    explode = (0.05, 0)
-    fig, ax = plt.subplots(figsize=(8, 6))
-    wedges, texts, autotexts = ax.pie(
-        sizes, explode=explode, labels=labels, colors=colors,
-        autopct='%1.1f%%', shadow=True, startangle=90,
-        textprops={'fontsize': 10, 'fontfamily': CH_FONT}
-    )
-    for autotext in autotexts:
-        autotext.set_color('white')
-        autotext.set_fontweight('bold')
-        autotext.set_fontfamily(CH_FONT)
-    ax.set_title('文本构成占比饼图（纯文字/标点符号）', fontsize=14, fontweight='bold', pad=20, fontfamily=CH_FONT)
-    plt.tight_layout()
-    return fig
+    total = pure_word_count + punctuation_count
+    
+    if total == 0:
+        st.info("📌 无有效文本数据可展示")
+        return
+    
+    # 计算占比
+    word_ratio = round((pure_word_count / total) * 100, 1)
+    punctuation_ratio = round((punctuation_count / total) * 100, 1)
+    
+    # 用表格展示占比
+    comp_data = pd.DataFrame({
+        "文本类型": ["纯文字", "标点符号"],
+        "数量": [pure_word_count, punctuation_count],
+        "占比(%)": [word_ratio, punctuation_ratio]
+    })
+    st.table(comp_data)
+    
+    # 用进度条可视化占比
+    st.write("### 占比可视化")
+    col1, col2 = st.columns(2)
+    with col1:
+        st.write(f"纯文字（{word_ratio}%）")
+        st.progress(word_ratio / 100)
+    with col2:
+        st.write(f"标点符号（{punctuation_ratio}%）")
+        st.progress(punctuation_ratio / 100)
 
-def plot_sentiment_reference_line(sentiment_score):
-    set_chinese_font()
-    global CH_FONT
-    x = [0, 0.3, 0.7, 1]
-    y = [0, 0, 0, 0]
-    labels = ['负面', '中性阈值', '正面阈值', '正面']
-    fig, ax = plt.subplots(figsize=(10, 3))
-    ax.plot(x, y, color='#C73E1D', linewidth=2, linestyle='--', label='情感倾向分界线')
-    ax.scatter(sentiment_score, 0, color='#2E86AB', s=200, zorder=5, label=f'当前得分：{sentiment_score}')
-    for i, label in enumerate(labels):
-        ax.text(x[i], 0.05, label, ha='center', va='bottom', fontsize=10, fontweight='bold', fontfamily=CH_FONT)
+# 替换Matplotlib情感参考图：用原生文字+标签展示情感区间
+def show_sentiment_reference(sentiment_score):
+    st.write("### 情感得分区间说明")
+    # 用markdown展示区间，天然支持中文
+    st.markdown("""
+    | 得分区间 | 情感倾向 |
+    |----------|----------|
+    | 0.0 - 0.3 | 负面 |
+    | 0.3 - 0.7 | 中性 |
+    | 0.7 - 1.0 | 正面 |
+    """)
+    
+    # 展示当前得分和倾向
     sentiment_label = "正面" if sentiment_score >=0.7 else "负面" if sentiment_score <=0.3 else "中性"
-    ax.text(sentiment_score, -0.05, sentiment_label, ha='center', va='top', 
-            fontsize=11, fontweight='bold', color='red', fontfamily=CH_FONT)
-    ax.set_xlim(-0.1, 1.1)
-    ax.set_ylim(-0.1, 0.1)
-    ax.set_xlabel('情感得分区间', fontsize=12, fontweight='bold', fontfamily=CH_FONT)
-    ax.set_title('情感得分参考图（0=负面，1=正面）', fontsize=14, fontweight='bold', pad=20, fontfamily=CH_FONT)
-    ax.legend(loc='upper right', prop={'family': CH_FONT})
-    ax.axis('off')
-    plt.tight_layout()
-    return fig
+    st.write(f"#### 当前文本：{sentiment_label}（得分：{sentiment_score}）")
+    
+    # 用彩色标签突出显示
+    if sentiment_label == "正面":
+        st.success(f"✅ 情感倾向：{sentiment_label}")
+    elif sentiment_label == "负面":
+        st.error(f"❌ 情感倾向：{sentiment_label}")
+    else:
+        st.info(f"ℹ️ 情感倾向：{sentiment_label}")
 
-# ---------------------- 页面交互（改用Streamlit原生柱状图） ----------------------
-st.title("📝 增强版文本分析Web应用（原生图表版）")
+# 简化词云图：若无法显示中文，替换为关键词权重列表
+def show_wordcloud_alternative(pure_text):
+    st.subheader("☁️ 关键词权重展示（替代词云图，中文清晰显示）")
+    top_keywords = get_top_keywords(pure_text, top_n=20)
+    if not top_keywords:
+        st.info("📌 无有效关键词可展示")
+        return
+    
+    # 用带样式的列表展示关键词（按出现次数排序，字体大小区分权重）
+    for word, count in top_keywords:
+        # 出现次数越多，字体越大
+        font_size = min(12 + count * 2, 20)  # 限制最大字体
+        st.markdown(f"<span style='font-size:{font_size}px; color:#2E86AB; font-weight:bold;'>{word}</span> （出现{count}次）", unsafe_allow_html=True)
+
+# ---------------------- 页面交互（全模块中文正常显示） ----------------------
+st.title("📝 增强版文本分析工具（全中文显示版）")
 st.divider()
 
 DEFAULT_TEXT = """
@@ -200,14 +183,11 @@ if st.button("🚀 开始分析", use_container_width=True):
         top_keywords = get_top_keywords(text_stats["纯文本内容"], top_n=top_n)
         sentiment_result = analyze_sentiment(text_stats["纯文本内容"])
         word_segmentation = get_word_segmentation(text_stats["纯文本内容"])
-        wordcloud_fig = generate_wordcloud(text_stats["纯文本内容"])
-        text_pie_fig = plot_text_composition_pie(text_stats)
-        sentiment_line_fig = plot_sentiment_reference_line(sentiment_result["情感得分"])
 
         st.success("✅ 分析完成")
         st.divider()
 
-        # 1. 基础统计
+        # 1. 基础统计（中文清晰显示）
         col1, col2 = st.columns(2)
         with col1:
             st.subheader("📊 基础文本统计")
@@ -222,14 +202,13 @@ if st.button("🚀 开始分析", use_container_width=True):
 
         st.divider()
 
-        # 2. 高频关键词 + Streamlit原生柱状图（彻底解决中文显示）
+        # 2. 高频关键词 + Streamlit原生柱状图（中文完美显示）
         st.subheader(f"🔤 高频关键词TOP{top_n}")
         if top_keywords:
-            # 转换为Streamlit支持的字典格式
             keyword_dict = {"关键词": [item[0] for item in top_keywords], "出现次数": [item[1] for item in top_keywords]}
             st.table(keyword_dict)
             
-            # Streamlit原生柱状图（自动支持中文，无字体问题）
+            # 原生柱状图（中文无压力）
             st.subheader("📊 高频关键词柱状图")
             st.bar_chart(
                 data=keyword_dict,
@@ -243,16 +222,16 @@ if st.button("🚀 开始分析", use_container_width=True):
 
         st.divider()
 
-        # 3. 分词结果
+        # 3. 中文分词结果（中文清晰显示）
         st.subheader("✂️ 中文分词结果")
         st.text_area("分词结果（| 分隔）", value=word_segmentation, height=100, disabled=True)
 
         st.divider()
 
-        # 4. 情感分析
+        # 4. 情感分析 + 原生参考展示（替代Matplotlib图，中文正常）
+        st.subheader("❤️ 情感倾向分析")
         col3, col4 = st.columns(2)
         with col3:
-            st.subheader("❤️ 情感倾向分析")
             st.write(f"情感得分：{sentiment_result['情感得分']}（0=负面，1=正面）")
             st.write(f"情感倾向：{sentiment_result['情感倾向']}")
             if sentiment_result['情感倾向'] == "正面":
@@ -270,23 +249,19 @@ if st.button("🚀 开始分析", use_container_width=True):
             else:
                 st.info("📌 无法生成有效摘要")
         
-        st.subheader("📈 情感得分参考图")
-        st.pyplot(sentiment_line_fig)
+        # 原生情感参考展示
+        show_sentiment_reference(sentiment_result["情感得分"])
 
         st.divider()
 
-        # 5. 文本构成饼图
-        st.subheader("🥧 文本构成占比图")
-        st.pyplot(text_pie_fig)
+        # 5. 文本构成展示（替代Matplotlib饼图，中文正常）
+        st.subheader("🥧 文本构成占比")
+        show_text_composition(text_stats)
 
         st.divider()
 
-        # 6. 词云图
-        st.subheader("☁️ 关键词词云图")
-        if wordcloud_fig:
-            st.pyplot(wordcloud_fig)
-        else:
-            st.info("📌 无法生成词云图（无有效关键词）")
+        # 6. 关键词权重展示（替代词云图，中文清晰显示）
+        show_wordcloud_alternative(text_stats["纯文本内容"])
 
         st.divider()
-        st.caption("💡 改用Streamlit原生柱状图，彻底解决中文显示问题，支持交互查看数值")
+        st.caption("💡 全模块采用Streamlit原生组件，彻底解决中文显示问题，无字体依赖")
