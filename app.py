@@ -3,9 +3,8 @@ import requests
 from bs4 import BeautifulSoup
 import jieba
 from collections import Counter
-import pandas as pd
 
-st.set_page_config(page_title="网页文本分析工具（带柱状图）", layout="centered")
+st.set_page_config(page_title="网页文本分析工具", layout="centered")
 
 # ---------------------- 核心函数 ----------------------
 def crawl_web_text(url):
@@ -30,15 +29,11 @@ def analyze_text(text, top_n=6):
     words = jieba.lcut(text)
     valid_words = [word for word in words if word not in stop_words and len(word) > 1]
     if not valid_words:
-        # 无有效关键词时，返回空列表和空DataFrame（避免None）
-        return [], pd.DataFrame(columns=["关键词", "出现次数"])
-    word_count = Counter(valid_words)
-    top_keywords = word_count.most_common(top_n)
-    keyword_df = pd.DataFrame(top_keywords, columns=["关键词", "出现次数"])
-    return top_keywords, keyword_df
+        return []
+    return Counter(valid_words).most_common(top_n)
 
 # ---------------------- 页面逻辑 ----------------------
-st.title("📝 网页文本分析工具（带柱状图可视化）")
+st.title("📝 网页文本分析工具")
 st.divider()
 
 mode = st.radio("请选择分析模式", ["网页URL爬取分析", "手动输入文本分析"], horizontal=True)
@@ -64,18 +59,24 @@ else:
 if "target_text" in st.session_state:
     top_n = st.slider("选择高频关键词展示数量", 3, 20, 6)
     if st.button("📊 开始文本分析", use_container_width=True):
-        top_keywords, keyword_df = analyze_text(st.session_state["target_text"], top_n)
-        if not keyword_df.empty:
-            col1, col2 = st.columns(2)
-            with col1:
-                st.subheader("🔤 高频关键词TOP{}".format(top_n))
-                for idx, (word, count) in enumerate(top_keywords, 1):
-                    st.write(f"{idx}. {word}：{count}次")
-            with col2:
-                st.subheader("📈 关键词出现次数柱状图")
-                st.bar_chart(keyword_df.set_index("关键词"), color="#1f77b4")
+        top_keywords = analyze_text(st.session_state["target_text"], top_n)
+        if top_keywords:
+            # 1. 文字展示高频关键词
+            st.subheader("🔤 高频关键词TOP{}".format(top_n))
+            for idx, (word, count) in enumerate(top_keywords, 1):
+                st.write(f"{idx}. {word}：{count}次")
+            
+            # 2. 柱状图（用原生列表构造数据）
+            st.subheader("📈 关键词出现次数柱状图")
+            # 拆分关键词和次数为两个列表
+            words = [item[0] for item in top_keywords]
+            counts = [item[1] for item in top_keywords]
+            # 用Streamlit原生柱状图，传入字典格式数据
+            st.bar_chart({"关键词": words, "出现次数": counts}, x="关键词", y="出现次数", color="#1f77b4")
+            
+            # 3. 表格展示（用原生列表构造）
             st.subheader("📋 关键词统计详情")
-            st.dataframe(keyword_df, index=False, use_container_width=True)
+            st.table([{"关键词": word, "出现次数": count} for word, count in top_keywords])
         else:
             st.info("📌 未提取到有效关键词")
 else:
